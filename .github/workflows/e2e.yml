@@ -43,6 +43,14 @@ jobs:
           ref: ${{ inputs.action_sha }}
           path: .e2e-action
 
+      - name: Make the action's Dockerfile resolvable
+        run: |
+          # action.yml wants Dockerfile but the repo ships it lowercase, and a local
+          # action ref is case-sensitive about it.
+          if [ ! -f .e2e-action/Dockerfile ] && [ -f .e2e-action/dockerfile ]; then
+            cp .e2e-action/dockerfile .e2e-action/Dockerfile
+          fi
+
       - name: Link back to the pull request
         run: |
           echo "Testing [PR #${{ inputs.pr_number }}](https://github.com/DSACMS/automated-codejson-generator/pull/${{ inputs.pr_number }}) at \`${{ inputs.action_sha }}\`" >> "$GITHUB_STEP_SUMMARY"
