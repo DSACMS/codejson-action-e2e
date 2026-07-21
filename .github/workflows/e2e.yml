@@ -1,0 +1,209 @@
+name: E2E
+run-name: e2e ${{ inputs.correlation_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      action_sha:
+        description: "automated-codejson-generator commit to test"
+        required: true
+        type: string
+      pr_number:
+        description: "The pull request that commit came from"
+        required: true
+        type: string
+      correlation_id:
+        description: "Lets the caller find this run by name"
+        required: true
+        type: string
+
+# One sandbox, so runs have to take turns or they fight over main and each other's
+# pull requests. Queue instead of cancelling so cleanup always gets to finish.
+concurrency:
+  group: e2e-sandbox
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout sandbox
+        uses: actions/checkout@v4
+
+      - name: Checkout action under test
+        uses: actions/checkout@v4
+        with:
+          repository: DSACMS/automated-codejson-generator
+          ref: ${{ inputs.action_sha }}
+          path: .e2e-action
+
+      - name: Link back to the pull request
+        run: |
+          echo "Testing [PR #${{ inputs.pr_number }}](https://github.com/DSACMS/automated-codejson-generator/pull/${{ inputs.pr_number }}) at \`${{ inputs.action_sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stage a valid code.json
+        run: cp e2e/fixtures/code.json.good code.json
+
+      - name: Validate the good code.json
+        uses: ./.e2e-action
+        env:
+          # The action validates instead of generating when it sees a pull_request
+          # event. That is the only switch for this mode, so we set it directly.
+          GITHUB_EVENT_NAME: pull_request
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: main
+
+      - name: Stage a broken code.json
+        run: cp e2e/fixtures/code.json.broken code.json
+
+      - name: Validate the broken code.json
+        id: validate_broken
+        continue-on-error: true
+        uses: ./.e2e-action
+        env:
+          GITHUB_EVENT_NAME: pull_request
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: main
+
+      - name: Assert the broken code.json was rejected
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.validate_broken.outcome }}" != "failure" ]; then
+            echo "::error::The action accepted a code.json that violates the schema."
+            exit 1
+          fi
+          echo "Rejected, as expected."
+
+      - name: Restore a valid code.json
+        run: cp e2e/fixtures/code.json.good code.json
+
+      - name: Generate and open a pull request
+        id: pr_mode
+        uses: ./.e2e-action
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: main
+          SKIP_PR: "false"
+
+      - name: Assert a pull request was opened
+        id: pr_assert
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ steps.pr_mode.outputs.pr_url }}
+        run: |
+          set -euo pipefail
+
+          # sendPR logs its failures and returns normally, so the action exits 0 even
+          # when it never opened anything. The output is the only real evidence.
+          if [ -z "${PR_URL:-}" ]; then
+            echo "::error::No pr_url output, so no pull request was opened."
+            exit 1
+          fi
+
+          PR_NUMBER="${PR_URL##*/}"
+          HEAD_REF=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefName --jq .headRefName)
+          echo "Opened $PR_URL from $HEAD_REF"
+
+          gh api "repos/${GITHUB_REPOSITORY}/contents/code.json?ref=${HEAD_REF}" --jq .content \
+            | base64 -d > code.json
+
+      - name: Assert the generated code.json looks right
+        run: |
+          set -euo pipefail
+          jq -e '.name == "codejson-action-e2e"' code.json > /dev/null
+          jq -e '.repositoryURL == "https://github.com/DSACMS/codejson-action-e2e"' code.json > /dev/null
+          jq -e '.laborHours > 0' code.json > /dev/null
+          jq -e '.date.metadataLastUpdated | length > 0' code.json > /dev/null
+
+      - name: Validate the generated code.json
+        uses: ./.e2e-action
+        env:
+          GITHUB_EVENT_NAME: pull_request
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: main
+
+      - name: Restore a valid code.json
+        run: cp e2e/fixtures/code.json.good code.json
+
+      - name: Generate and push straight to main
+        id: push_mode
+        uses: ./.e2e-action
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Only needs write access to this repo, which the job token already has.
+          ADMIN_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: main
+          SKIP_PR: "true"
+
+      - name: Assert the commit landed on main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          METHOD: ${{ steps.push_mode.outputs.method_used }}
+          COMMIT_SHA: ${{ steps.push_mode.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+
+          # pushDirectlyWithFallback quietly opens a pull request when the push fails,
+          # so exiting 0 doesn't mean anything landed on main.
+          if [ "${METHOD:-}" != "direct_push" ]; then
+            echo "::error::Expected a direct push, got '${METHOD:-<none>}'."
+            exit 1
+          fi
+
+          gh api "repos/${GITHUB_REPOSITORY}/contents/code.json?ref=main" --jq .content \
+            | base64 -d > code.json
+
+          MAIN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
+          if [ "$MAIN_SHA" != "$COMMIT_SHA" ]; then
+            echo "::error::main is at ${MAIN_SHA}, but the action reported ${COMMIT_SHA}."
+            exit 1
+          fi
+          echo "Pushed ${COMMIT_SHA} to main."
+
+      - name: Validate the pushed code.json
+        uses: ./.e2e-action
+        env:
+          GITHUB_EVENT_NAME: pull_request
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: main
+
+      - name: Reset the sandbox
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # No -e here. Every reset should be attempted even if an earlier one fails.
+          set -uo pipefail
+
+          # Sweep by pattern rather than tracking what this run made, so a run that
+          # died halfway through still gets cleaned up by the next one.
+          for BRANCH in $(gh api "repos/${GITHUB_REPOSITORY}/branches?per_page=100" --jq '.[].name' | grep '^code-json-'); do
+            PR_NUMBER=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+            if [ -n "$PR_NUMBER" ]; then
+              gh pr close "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --comment "Closing e2e artifact."
+            fi
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${BRANCH}"
+            echo "Removed $BRANCH"
+          done
+
+          BASELINE=$(cat e2e/fixtures/code.json.good)
+          CURRENT=$(gh api "repos/${GITHUB_REPOSITORY}/contents/code.json?ref=main" --jq .content | base64 -d)
+
+          if [ "$BASELINE" != "$CURRENT" ]; then
+            gh api -X PUT "repos/${GITHUB_REPOSITORY}/contents/code.json" \
+              -f message="Reset sandbox code.json after e2e" \
+              -f content="$(base64 -w0 e2e/fixtures/code.json.good)" \
+              -f branch=main \
+              -f sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/code.json?ref=main" --jq .sha)"
+            echo "Reset code.json on main"
+          fi
