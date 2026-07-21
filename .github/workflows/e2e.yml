@@ -43,6 +43,17 @@ jobs:
           ref: ${{ inputs.action_sha }}
           path: .e2e-action
 
+      - name: Make the action's Dockerfile resolvable
+        run: |
+          # action.yml wants Dockerfile but the repo ships it lowercase, and a local
+          # action ref is case-sensitive about it.
+          if [ ! -f .e2e-action/Dockerfile ] && [ -f .e2e-action/dockerfile ]; then
+            cp .e2e-action/dockerfile .e2e-action/Dockerfile
+          fi
+
+      - name: Build the action image
+        run: docker build -t codejson-action .e2e-action
+
       - name: Link back to the pull request
         run: |
           echo "Testing [PR #${{ inputs.pr_number }}](https://github.com/DSACMS/automated-codejson-generator/pull/${{ inputs.pr_number }}) at \`${{ inputs.action_sha }}\`" >> "$GITHUB_STEP_SUMMARY"
@@ -51,14 +62,15 @@ jobs:
         run: cp e2e/fixtures/code.json.good code.json
 
       - name: Validate the good code.json
-        uses: ./.e2e-action
-        env:
-          # The action validates instead of generating when it sees a pull_request
-          # event. That is the only switch for this mode, so we set it directly.
-          GITHUB_EVENT_NAME: pull_request
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: main
+        run: |
+          # GITHUB_EVENT_NAME can't be set through uses:, so run the image ourselves
+          # to put the action in validation mode.
+          docker run --rm \
+            -e GITHUB_EVENT_NAME=pull_request \
+            -e GITHUB_ACTION=e2e \
+            -e INPUT_GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} \
+            -v "${{ github.workspace }}:/github/workspace" \
+            codejson-action
 
       - name: Stage a broken code.json
         run: cp e2e/fixtures/code.json.broken code.json
@@ -66,12 +78,13 @@ jobs:
       - name: Validate the broken code.json
         id: validate_broken
         continue-on-error: true
-        uses: ./.e2e-action
-        env:
-          GITHUB_EVENT_NAME: pull_request
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: main
+        run: |
+          docker run --rm \
+            -e GITHUB_EVENT_NAME=pull_request \
+            -e GITHUB_ACTION=e2e \
+            -e INPUT_GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} \
+            -v "${{ github.workspace }}:/github/workspace" \
+            codejson-action
 
       - name: Assert the broken code.json was rejected
         run: |
@@ -124,12 +137,13 @@ jobs:
           jq -e '.date.metadataLastUpdated | length > 0' code.json > /dev/null
 
       - name: Validate the generated code.json
-        uses: ./.e2e-action
-        env:
-          GITHUB_EVENT_NAME: pull_request
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: main
+        run: |
+          docker run --rm \
+            -e GITHUB_EVENT_NAME=pull_request \
+            -e GITHUB_ACTION=e2e \
+            -e INPUT_GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} \
+            -v "${{ github.workspace }}:/github/workspace" \
+            codejson-action
 
       - name: Restore a valid code.json
         run: cp e2e/fixtures/code.json.good code.json
@@ -170,12 +184,13 @@ jobs:
           echo "Pushed ${COMMIT_SHA} to main."
 
       - name: Validate the pushed code.json
-        uses: ./.e2e-action
-        env:
-          GITHUB_EVENT_NAME: pull_request
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: main
+        run: |
+          docker run --rm \
+            -e GITHUB_EVENT_NAME=pull_request \
+            -e GITHUB_ACTION=e2e \
+            -e INPUT_GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} \
+            -v "${{ github.workspace }}:/github/workspace" \
+            codejson-action
 
       - name: Reset the sandbox
         if: always()
