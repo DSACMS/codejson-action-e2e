@@ -11,9 +11,7 @@
         "URL": "https://creativecommons.org/publicdomain/zero/1.0/"
       }
     ],
-    "usageType": [
-      "openSource"
-    ],
+    "usageType": ["openSource"],
     "exemptionText": ""
   },
   "organization": "Centers for Medicare & Medicaid Services",
@@ -25,21 +23,15 @@
   "disclaimerURL": "",
   "disclaimerText": "",
   "vcs": "git",
-  "laborHours": 3107,
+  "laborHours": 0,
   "reuseFrequency": {
     "forks": 0,
     "clones": 0
   },
-  "platforms": [
-    "web"
-  ],
-  "categories": [
-    "developer-tools"
-  ],
+  "platforms": ["web"],
+  "categories": ["developer-tools"],
   "softwareType": "standalone/backend",
-  "languages": [
-    "Python"
-  ],
+  "languages": ["Python"],
   "maintenance": "internal",
   "contractNumber": [],
   "SBOM": "https://github.com/DSACMS/codejson-action-e2e/network/dependencies",
@@ -47,14 +39,11 @@
   "reusedCode": [],
   "partners": [],
   "date": {
-    "created": "2026-07-15T14:17:07Z",
-    "lastModified": "2026-07-31T20:09:15Z",
-    "metadataLastUpdated": "2026-08-04T21:20:10.101Z"
+    "created": "2026-07-15T00:00:00Z",
+    "lastModified": "2026-07-15T00:00:00Z",
+    "metadataLastUpdated": "2026-07-15T00:00:00Z"
   },
-  "tags": [
-    "codejson",
-    "testing"
-  ],
+  "tags": ["codejson", "testing"],
   "contact": {
     "email": "opensource@cms.hhs.gov",
     "name": "CMS Open Source Team"
@@ -66,15 +55,9 @@
   "userInput": false,
   "fismaLevel": "low",
   "group": "CMS/OA/DSAC",
-  "projects": [
-    "share-it-act"
-  ],
+  "projects": ["share-it-act"],
   "systems": [],
-  "subsetInHealthcare": [
-    "operational"
-  ],
-  "userType": [
-    "government"
-  ],
+  "subsetInHealthcare": ["operational"],
+  "userType": ["government"],
   "maturityModelTier": 1
 }
