@@ -2,8 +2,8 @@
 name: Add Team to Repository Request Ticket
 about: Ticket for requesting team to be added to repository
 title: "[REQUEST]: "
-labels: # TODO: Add labels for categorization of requests
-assignees: # TODO: Add organization owner or help desk team
+labels: ""
+assignees: sachin-panayil
 ---
 
 ## Request a New Team to be Added to a Repository
