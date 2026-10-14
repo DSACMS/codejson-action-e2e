@@ -192,6 +192,120 @@ jobs:
             -v "${{ github.workspace }}:/github/workspace" \
             codejson-action
 
+      - name: Stage a neutral code.json
+        run: cp e2e/fixtures/code.json.neutral code.json
+
+      - name: Validate the neutral code.json against the neutral schema
+        run: |
+          # The fixture leaves out every CMS-required field, so this only passes if
+          # AGENCY really switched the schema away from the cms default.
+          docker run --rm \
+            -e GITHUB_EVENT_NAME=pull_request \
+            -e GITHUB_ACTION=e2e \
+            -e INPUT_GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} \
+            -e INPUT_AGENCY=neutral \
+            -v "${{ github.workspace }}:/github/workspace" \
+            codejson-action
+
+      - name: Remove code.json for a first run
+        run: rm code.json
+
+      - name: Generate a neutral code.json from scratch
+        id: neutral_mode
+        uses: ./.e2e-action
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: main
+          SKIP_PR: "false"
+          AGENCY: neutral
+
+      - name: Assert the neutral code.json has only neutral fields
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ steps.neutral_mode.outputs.pr_url }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${PR_URL:-}" ]; then
+            echo "::error::No pr_url output, so no pull request was opened."
+            exit 1
+          fi
+
+          PR_NUMBER="${PR_URL##*/}"
+          HEAD_REF=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefName --jq .headRefName)
+          echo "Opened $PR_URL from $HEAD_REF"
+
+          gh api "repos/${GITHUB_REPOSITORY}/contents/code.json?ref=${HEAD_REF}" --jq .content \
+            | base64 -d > code.json
+
+          # Top-level keys of codejson-core's neutral baseline (dist/baselines/neutral.js,
+          # v0.3.0). A cms draft would add repositoryHost, maturityModelTier and the rest.
+          NEUTRAL_KEYS='["name","version","description","status","permissions","organization","repositoryURL","repositoryVisibility","homepageURL","downloadURL","disclaimerURL","disclaimerText","vcs","laborHours","reuseFrequency","languages","maintenance","contractNumber","SBOM","relatedCode","reusedCode","partners","date","tags","contact","feedbackMechanism","AIUseCaseID"]'
+
+          EXTRA=$(jq -c --argjson allowed "$NEUTRAL_KEYS" 'keys - $allowed' code.json)
+          if [ "$EXTRA" != "[]" ]; then
+            echo "::error::The neutral code.json has fields outside the neutral baseline: ${EXTRA}"
+            exit 1
+          fi
+          jq -e '.name == "codejson-action-e2e"' code.json > /dev/null
+          echo "Only neutral fields, as expected."
+
+      - name: Run with an unknown AGENCY
+        id: bogus_agency
+        continue-on-error: true
+        uses: ./.e2e-action
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: main
+          SKIP_PR: "false"
+          AGENCY: bogus
+
+      - name: Assert the unknown AGENCY was rejected
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.bogus_agency.outcome }}" != "failure" ]; then
+            echo "::error::The action accepted AGENCY=bogus instead of failing."
+            exit 1
+          fi
+          echo "Rejected, as expected."
+
+      - name: Stage a code.json with blank enrichable fields
+        run: cp e2e/fixtures/code.json.ai code.json
+
+      - name: Generate with AI enrichment
+        id: ai_mode
+        uses: ./.e2e-action
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # With SKIP_PR, AI-filled fields force a pull request. If AI fills nothing,
+          # this token makes the action push straight to main, so a silent AI failure
+          # fails the assertion below instead of passing as a normal pull request.
+          ADMIN_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: main
+          SKIP_PR: "true"
+          ENABLE_AI: "true"
+
+      - name: Assert the AI-filled fields were sent for review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          METHOD: ${{ steps.ai_mode.outputs.method_used }}
+          PR_URL: ${{ steps.ai_mode.outputs.pr_url }}
+        run: |
+          set -euo pipefail
+
+          if [ "${METHOD:-}" != "pull_request" ]; then
+            echo "::error::Expected a pull request for AI-filled fields, got '${METHOD:-<none>}'."
+            exit 1
+          fi
+
+          PR_NUMBER="${PR_URL##*/}"
+          if ! gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body --jq .body \
+            | grep -qF '## Review AI-Generated Fields'; then
+            echo "::error::$PR_URL has no AI review notice in its body."
+            exit 1
+          fi
+          echo "Opened $PR_URL with an AI review notice."
+
       - name: Reset the sandbox
         if: always()
         env:

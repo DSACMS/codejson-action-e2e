@@ -2,13 +2,13 @@
 name: Outside Collaborator Repository Access Request Ticket
 about: Ticket for requesting outside collaborator to be added to repository
 title: "[REQUEST]: "
-labels: # TODO: Add labels for categorization of requests
-assignees: # TODO: Add organization owner or help desk team
+labels: ""
+assignees: sachin-panayil
 ---
 
 ## Request an outside collaborator to be added to repository
 
-For individuals that are not members of the {{ cookiecutter.project_org }} GitHub organization, these outside collaborators can request access to a repository. Fill out this issue to file the request or make a pull request to the `COMMUNITY.md` file, then a repository admin will grant access.
+For individuals that are not members of the DSACMS GitHub organization, these outside collaborators can request access to a repository. Fill out this issue to file the request or make a pull request to the `COMMUNITY.md` file, then a repository admin will grant access.
 
 ### Information Required
 
