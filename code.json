@@ -2,7 +2,7 @@
   "name": "codejson-action-e2e",
   "version": "1.0.0",
   "description": "Sandbox repository used to end-to-end test the automated code.json generator",
-  "longDescription": "This repository is a disposable sandbox that exists purely so the automated-codejson-generator action can be exercised for real against a live GitHub repository. It holds a small sample source tree so that scc has something to measure, a known good code.json, and a deliberately invalid one. The end-to-end workflow runs the action here in each of its modes and resets this repository afterwards.",
+  "longDescription": "This repository serves as an end-to-end testing sandbox for the automated code.json generator. It is designed to rigorously validate changes to the generator by running it against a live GitHub repository, ensuring that the generated metadata accurately reflects the source code. The workflow systematically tests various operational modes, including validation, pull request creation, and AI enrichment, to confirm the action performs as claimed. This infrastructure is critical for maintaining the reliability and trustworthiness of the code.json tooling, which supports the CMS Open Source Program Office in ensuring compliance with requirements like the SHARE IT Act.",
   "status": "Development",
   "permissions": {
     "licenses": [
@@ -31,12 +31,18 @@
     "clones": 0
   },
   "platforms": [
-    "web"
+    "linux",
+    "windows",
+    "mac"
   ],
   "categories": [
-    "developer-tools"
+    "application-development",
+    "project-management",
+    "test-management",
+    "workflow-management",
+    "data-analytics"
   ],
-  "softwareType": "standalone/backend",
+  "softwareType": "addon",
   "languages": [
     "Python"
   ],
@@ -48,12 +54,15 @@
   "partners": [],
   "date": {
     "created": "2026-07-15T14:17:07Z",
-    "lastModified": "2026-10-15T14:38:48Z",
-    "metadataLastUpdated": "2026-10-15T14:40:13.917Z"
+    "lastModified": "2026-10-15T14:40:20Z",
+    "metadataLastUpdated": "2026-10-15T14:40:27.536Z"
   },
   "tags": [
     "codejson",
-    "testing"
+    "testing",
+    "python",
+    "e2e",
+    "github-action"
   ],
   "contact": {
     "email": "opensource@cms.hhs.gov",
